@@ -1,10 +1,3 @@
-# Cog Whisper with speaker diarization
-
-Added a speaker diarization step before Wisper transcription.
-
-
-Run save_model.py before to dl models so they are packaged in the Cog Docker image.
-
 # Whisper
 
 [[Blog]](https://openai.com/blog/whisper)
