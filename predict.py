@@ -135,10 +135,22 @@ class Predictor(BasePredictor):
             "no_speech_threshold": no_speech_threshold,
         }
 
+        # Convert to wav if necessary
+        audio_path = audio
+
+        if audio.suffix != ".wav":
+            logging.info("Converting audio to wav")
+            audio_path = audio.with_suffix(".wav")
+            try: 
+                ffmpeg.input(str(audio)).output(str(audio_path)).run()
+            except Exception as e:
+                logging.exception(e)
+                raise e
+
         with open(diarization, 'r') as f:
             diarization_input = json.load(f)
         diarization_groups = group_diarization_segments_by_speaker(diarization_input)
-        split_audio_file(str(audio), diarization_groups)
+        split_audio_file(str(audio_path), diarization_groups)
 
         for i, group in enumerate(diarization_groups):
             result = model.transcribe(str(i) + '.wav', temperature=temperature, **args)
