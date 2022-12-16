@@ -20,15 +20,22 @@ from whisper.model import Whisper, ModelDimensions
 from whisper.tokenizer import LANGUAGES, TO_LANGUAGE_CODE
 from whisper.utils import format_timestamp
 
+import ffmpeg
+from pydub import AudioSegment
 
 class ModelOutput(BaseModel):
-    detected_language: str
-    transcription: str
-    segments: Any
-    translation: Optional[str]
-    txt_file: Optional[Path]
-    srt_file: Optional[Path]
-
+    # Return an array of diarization segments
+    diarization: Any
+    #    start: float
+    #    end: float
+    #    speaker: str
+    #    Plus regular whisper model output
+    #    detected_language: str
+    #    transcription: str
+    #    segments: Any
+    #    translation: Optional[str]
+    #    txt_file: Optional[Path]
+    #    srt_file: Optional[Path]
 
 class Predictor(BasePredictor):
     def setup(self):
@@ -49,6 +56,10 @@ class Predictor(BasePredictor):
             default="base",
             choices=["tiny", "base", "small", "medium", "large-v1", "large-v2"],
             description="Choose a Whisper model.",
+        ),
+        diarization: str = Input(
+            default=None,
+            description="JSON array of speaker diarization output from cog-pyannote model",
         ),
         transcription: str = Input(
             choices=["plain text", "srt", "vtt"],
@@ -125,27 +136,30 @@ class Predictor(BasePredictor):
             "no_speech_threshold": no_speech_threshold,
         }
 
-        result = model.transcribe(str(audio), temperature=temperature, **args)
+        diarization_groups = group_diarization_segments_by_speaker(diarization)
+        split_audio_file(str(audio), diarization_groups)
 
-        if transcription == "plain text":
-            transcription = result["text"]
-        elif transcription == "srt":
-            transcription = write_srt(result["segments"])
-        else:
-            transcription = write_vtt(result["segments"])
+        for i, group in enumerate(diarization_groups):
+            result = model.transcribe(str(i) + '.wav', temperature=temperature, **args)
 
-        if translate:
-            translation = model.transcribe(
-                str(audio), task="translate", temperature=temperature, **args
-            )
+            if transcription == "plain text":
+                transcription = result["text"]
+            elif transcription == "srt":
+                transcription = write_srt(result["segments"])
+            else:
+                transcription = write_vtt(result["segments"])
 
-        return ModelOutput(
-            segments=result["segments"],
-            detected_language=LANGUAGES[result["language"]],
-            transcription=transcription,
-            translation=translation["text"] if translate else None,
-        )
+            if translate:
+                translation = model.transcribe(
+                    str(i) + '.wav', task="translate", temperature=temperature, **args
+                )
+            # add results to diarization_groups
+            diarization_groups[i]["segments"]=result["segments"],
+            diarization_groups[i]["detected_language"]=LANGUAGES[result["language"]],
+            diarization_groups[i]["transcription"]=transcription,
+            diarization_groups[i]["translation"]=translation["text"] if translate else None,
 
+        reutrn ModelOutput(diarization_groups)
 
 def write_vtt(transcript):
     result = ""
@@ -165,3 +179,39 @@ def write_srt(transcript):
         result += f"{segment['text'].strip().replace('-->', '->')}\n"
         result += "\n"
     return result
+
+def group_diarization_segments_by_speaker(diarization):
+    new_diarization = []
+    for i in range(len(diarization)):
+        if i == 0:
+            new_diarization.append({'start': diarization[i]['start'], 'end': diarization[i]['end'], 'speaker': diarization[i]['speaker']})
+        elif diarization[i]['speaker'] == diarization[i-1]['speaker']:
+            new_diarization[-1]['end'] = diarization[i]['end'] # update end time
+        else:
+            new_diarization.append({'start': diarization[i]['start'], 'end': diarization[i]['end'], 'speaker': diarization[i]['speaker']})
+    return new_diarization
+
+def extract_audio_as_wav(file, output_fn):
+    # Convert input audio or video format to wav for pydub to split easily
+    # Use same wav format as Wisper https://github.com/openai/whisper/blob/e90b8fa7e845ae184ed9aa0babcf3cde6f16719e/whisper/audio.py#L42
+    try:
+        # This launches a subprocess to decode audio while down-mixing and resampling as necessary.
+        # Requires the ffmpeg CLI and `ffmpeg-python` package to be installed.
+        out, _ = (
+            ffmpeg.input(file, threads=0)
+            .output(output_fn, format="s16le", acodec="pcm_s16le", ac=1, ar=sr)
+            .run(cmd="ffmpeg", capture_stdout=True, capture_stderr=True)
+        )
+    except ffmpeg.Error as e:
+        raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}")
+    return True
+
+def split_audio_file(wav_file, diarization_groups):
+    audio = AudioSegment.from_wav(wav_file)
+    # iterate through diarization groups with index
+    for i, g in enumerate(diarization_groups):
+        # convert start and end times to milliseconds
+        start = int(g['start'] * 1000)
+        end = int(g['end'] * 1000)
+        audio[start:end].export(str(i) + '.wav', format='wav')
+    return True

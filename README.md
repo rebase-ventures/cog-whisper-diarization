@@ -1,3 +1,8 @@
+# Cog Whisper model which includes speaker diarization
+
+
+Use cog-pyannote model on file first to get speaker diarization JSON array. This model then takes this input of timings, groups by speaker and splits input file into segments, before running Whisper like normal on each speaker segment separately.
+
 # Whisper
 
 [[Blog]](https://openai.com/blog/whisper)
