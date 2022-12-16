@@ -57,9 +57,8 @@ class Predictor(BasePredictor):
             choices=["tiny", "base", "small", "medium", "large-v1", "large-v2"],
             description="Choose a Whisper model.",
         ),
-        diarization: str = Input(
-            default=None,
-            description="JSON array of speaker diarization output from cog-pyannote model",
+        diarization: Path = Input(
+            description="JSON file with array of speaker diarization output from cog-pyannote model",
         ),
         transcription: str = Input(
             choices=["plain text", "srt", "vtt"],
@@ -136,7 +135,9 @@ class Predictor(BasePredictor):
             "no_speech_threshold": no_speech_threshold,
         }
 
-        diarization_groups = group_diarization_segments_by_speaker(diarization)
+        with open(diarization, 'r') as f:
+            diarization_input = json.load(f)
+        diarization_groups = group_diarization_segments_by_speaker(diarization_input)
         split_audio_file(str(audio), diarization_groups)
 
         for i, group in enumerate(diarization_groups):
