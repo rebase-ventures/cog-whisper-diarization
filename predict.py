@@ -151,12 +151,12 @@ class Predictor(BasePredictor):
         diarization_input = json.loads(diarization)
         diarization_groups = group_diarization_segments_by_speaker(diarization_input)
         split_audio_file(str(audio_path), diarization_groups)
-        
+
         for i, group in enumerate(diarization_groups):
             result = model.transcribe(str(i) + '.wav', temperature=temperature, **args)
 
             if transcription == "plain text":
-                transcription = result["text"]
+                transcription = write_plain_text(result["segments"])
             elif transcription == "srt":
                 transcription = write_srt(result["segments"])
             else:
@@ -167,7 +167,7 @@ class Predictor(BasePredictor):
                     str(i) + '.wav', task="translate", temperature=temperature, **args
                 )
             # add results to diarization_groups
-            diarization_groups[i]["segments"]=result["segments"],
+            # diarization_groups[i]["segments"]=result["segments"],
             diarization_groups[i]["detected_language"]=LANGUAGES[result["language"]],
             diarization_groups[i]["transcription"]=transcription,
             diarization_groups[i]["translation"]=translation["text"] if translate else None,
@@ -191,6 +191,12 @@ def write_srt(transcript):
         result += f"{format_timestamp(segment['end'], always_include_hours=True, decimal_marker=',')}\n"
         result += f"{segment['text'].strip().replace('-->', '->')}\n"
         result += "\n"
+    return result
+
+def write_plain_text(transcript):
+    result = ""
+    for segment in transcript:
+        result += segment['text']
     return result
 
 def group_diarization_segments_by_speaker(diarization):
