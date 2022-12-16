@@ -1,7 +1,13 @@
 # Cog Whisper model which includes speaker diarization
 
-
 Use cog-pyannote model on file first to get speaker diarization JSON array. This model then takes this input of timings, groups by speaker and splits input file into segments, before running Whisper like normal on each speaker segment separately.
+
+`cog build -t whisper-diarization`
+We need to use `--add-host host.docker.internal:host-gateway` so that docker can access localhost where mini_httpd serves up a local data directory. We also serve this model on 5001 as cog-pyannote (speaker-diarization) is running on 5000.
+`docker run -d -p 5001:5000 --add-host host.docker.internal:host-gateway --gpus all whisper-diarization`
+
+Example running with cli:
+`cog predict -i "model='large-v2' audio='@jre-kevin-hart-youtube-short-vzx6h2sAGTU.wav' diarization='[{\"start\": 0.4978125, \"end\": 5.442187499999999, \"speaker\": \"SPEAKER_01\"}, {\"start\": 5.442187499999999, \"end\": 8.513437500000002, \"speaker\": \"SPEAKER_00\"}, {\"start\": 9.424687500000001, \"end\": 17.5078125, \"speaker\": \"SPEAKER_00\"}, {\"start\": 9.6440625, \"end\": 10.572187500000002, \"speaker\": \"SPEAKER_01\"}, {\"start\": 11.4328125, \"end\": 12.630937500000002, \"speaker\": \"SPEAKER_01\"}, {\"start\": 17.5078125, \"end\": 47.3090625, \"speaker\": \"SPEAKER_01\"}, {\"start\": 44.8959375, \"end\": 56.8096875, \"speaker\": \"SPEAKER_00\"}, {\"start\": 58.10906250000001, \"end\": 63.1378125, \"speaker\": \"SPEAKER_00\"}, {\"start\": 63.81281250000001, \"end\": 102.3384375, \"speaker\": \"SPEAKER_00\"}, {\"start\": 102.3384375, \"end\": 105.4603125, \"speaker\": \"SPEAKER_01\"}]'"`
 
 # Whisper
 

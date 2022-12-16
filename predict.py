@@ -20,11 +20,12 @@ from whisper.model import Whisper, ModelDimensions
 from whisper.tokenizer import LANGUAGES, TO_LANGUAGE_CODE
 from whisper.utils import format_timestamp
 
+import json
 import ffmpeg
 from pydub import AudioSegment
 
+# Return an array of diarization segments
 class ModelOutput(BaseModel):
-    # Return an array of diarization segments
     diarization: Any
     #    start: float
     #    end: float
@@ -57,8 +58,9 @@ class Predictor(BasePredictor):
             choices=["tiny", "base", "small", "medium", "large-v1", "large-v2"],
             description="Choose a Whisper model.",
         ),
-        diarization: Path = Input(
-            description="JSON file with array of speaker diarization output from cog-pyannote model",
+        diarization: str = Input(
+            default='[{"start": 0.4978125, "end": 5.442187499999999, "speaker": "SPEAKER_01"}, {"start": 5.442187499999999, "end": 8.513437500000002, "speaker": "SPEAKER_00"}, {"start": 9.424687500000001, "end": 17.5078125, "speaker": "SPEAKER_00"}, {"start": 9.6440625, "end": 10.572187500000002, "speaker": "SPEAKER_01"}, {"start": 11.4328125, "end": 12.630937500000002, "speaker": "SPEAKER_01"}, {"start": 17.5078125, "end": 47.3090625, "speaker": "SPEAKER_01"}, {"start": 44.8959375, "end": 56.8096875, "speaker": "SPEAKER_00"}, {"start": 58.10906250000001, "end": 63.1378125, "speaker": "SPEAKER_00"}, {"start": 63.81281250000001, "end": 102.3384375, "speaker": "SPEAKER_00"}, {"start": 102.3384375, "end": 105.4603125, "speaker": "SPEAKER_01"}]', # temp for testing
+            description="JSON array of speaker diarization output from cog-pyannote model",
         ),
         transcription: str = Input(
             choices=["plain text", "srt", "vtt"],
@@ -135,9 +137,8 @@ class Predictor(BasePredictor):
             "no_speech_threshold": no_speech_threshold,
         }
 
-        # Convert to wav if necessary
         audio_path = audio
-
+        # Convert to wav if necessary
         if audio.suffix != ".wav":
             logging.info("Converting audio to wav")
             audio_path = audio.with_suffix(".wav")
@@ -147,11 +148,10 @@ class Predictor(BasePredictor):
                 logging.exception(e)
                 raise e
 
-        with open(diarization, 'r') as f:
-            diarization_input = json.load(f)
+        diarization_input = json.loads(diarization)
         diarization_groups = group_diarization_segments_by_speaker(diarization_input)
         split_audio_file(str(audio_path), diarization_groups)
-
+        
         for i, group in enumerate(diarization_groups):
             result = model.transcribe(str(i) + '.wav', temperature=temperature, **args)
 
@@ -172,7 +172,7 @@ class Predictor(BasePredictor):
             diarization_groups[i]["transcription"]=transcription,
             diarization_groups[i]["translation"]=translation["text"] if translate else None,
 
-        reutrn ModelOutput(diarization_groups)
+        return ModelOutput(diarization=diarization_groups)
 
 def write_vtt(transcript):
     result = ""
