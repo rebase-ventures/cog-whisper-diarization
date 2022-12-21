@@ -140,12 +140,12 @@ class Predictor(BasePredictor):
         audio_path = audio
         # Convert to wav if necessary
         if audio.suffix != ".wav":
-            logging.info("Converting audio to wav")
+            print("Converting audio to wav")
             audio_path = audio.with_suffix(".wav")
             try: 
                 ffmpeg.input(str(audio)).output(str(audio_path)).run()
             except Exception as e:
-                logging.exception(e)
+                print(e)
                 raise e
         
         diarization_input = json.loads(diarization)
@@ -161,7 +161,7 @@ class Predictor(BasePredictor):
             elif transcription == "srt":
                 transcription = write_srt(result["segments"])
             else:
-                transcription = write_vtt(result["segments"])
+                transcription = write_vtt(result["segments"], group['start'])
 
             if translate:
                 translation = model.transcribe(
@@ -175,11 +175,11 @@ class Predictor(BasePredictor):
 
         return ModelOutput(diarization=diarization_groups)
 
-def write_vtt(transcript):
-    # TODO fix timestamp alignment across speaker parts
+def write_vtt(transcript, offset_seconds):
+    # TODO fix timestamp alignment across speaker parts by adding diarization start to segment start and end. Both are floating point numbers in seconds.
     result = ""
     for segment in transcript:
-        result += f"{format_timestamp(segment['start'])} --> {format_timestamp(segment['end'])}\n"
+        result += f"{format_timestamp(offset_seconds+segment['start'])} --> {format_timestamp(offset_seconds+segment['end'])}\n"
         result += f"{segment['text'].strip().replace('-->', '->')}\n"
         result += "\n"
     return result
